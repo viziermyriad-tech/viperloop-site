@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0f1c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VIPERLOOP">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<meta name="description" content="VIPERLOOP — неоновая 3D-змейка: собирай сферы, расти и сражайся с ботами. Работает офлайн.">
+<title>VIPERLOOP</title>
+<script src="vendor/three.min.js"></script>
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #0a0f1c; touch-action: none; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #e2e8f0; }
+  canvas { display: block; }
+
+  .panel {
+    background: rgba(9, 14, 28, .78);
+    border: 1px solid rgba(96, 130, 200, .22);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    padding: 10px 14px;
+  }
+  #hud {
+    position: fixed; top: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; z-index: 14; gap: 10px;
+  }
+  #hudRight { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  #hudRight .sndPanel { padding: 6px 10px; pointer-events: auto; }
+  #soundBtn { background: none; border: 0; cursor: pointer; font-size: 18px; line-height: 1; padding: 2px; }
+  .panel-title { font-size: 10px; letter-spacing: 2px; color: #7d92c0; margin-bottom: 6px; }
+  #board .row { display: flex; gap: 10px; font-size: 13px; padding: 2px 0; }
+  #board .rank { width: 16px; opacity: .55; }
+  #board .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #board .sc { font-weight: 700; color: #7dd3fc; }
+  #board .row.me .nm { color: #4ade80; font-weight: 700; }
+  #mmPanel { padding: 8px; }
+  #mm { display: block; border-radius: 8px; }
+  #stats { position: fixed; left: 12px; bottom: 12px; z-index: 10; font-size: 13px; display: none; }
+  #stats b { color: #4ade80; }
+  #hint {
+    position: fixed; right: 12px; bottom: 12px; z-index: 10;
+    font-size: 11px; color: #8fa3c8; text-align: right; padding: 8px 12px;
+  }
+  #flash {
+    position: fixed; inset: 0; z-index: 15; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 40, 60, .55) 100%);
+  }
+  .touch-zones { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+  .tz {
+    position: absolute; top: 0; bottom: 0; width: 50%;
+    pointer-events: auto;
+    display: flex; align-items: center;
+    color: rgba(255, 255, 255, .16);
+    font-size: 54px;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  .tz-l { left: 0; justify-content: flex-start; padding-left: 14px; }
+  .tz-r { right: 0; justify-content: flex-end; padding-right: 14px; }
+  .tz.on { color: rgba(74, 222, 128, .6); }
+  #touchHint {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    z-index: 13; font-size: 11px; color: #9fb2d8; padding: 7px 12px;
+    pointer-events: none; text-align: center;
+  }
+
+  .overlay2 {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(5, 8, 16, .72);
+    backdrop-filter: blur(6px);
+  }
+  .hidden { display: none !important; }
+  .card {
+    text-align: center;
+    background: rgba(13, 20, 38, .92);
+    border: 1px solid rgba(96, 130, 200, .3);
+    border-radius: 20px;
+    padding: 34px 44px;
+    max-width: 440px;
+    margin: 16px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .6);
+  }
+  .logo {
+    font-size: 44px; font-weight: 900; letter-spacing: 5px;
+    background: linear-gradient(90deg, #4ade80, #22d3ee, #a78bfa);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .logo span {
+    font-size: 18px; vertical-align: super; margin-left: 6px;
+    -webkit-text-fill-color: #4ade80;
+  }
+  .card .sub { font-size: 14px; color: #94a3b8; line-height: 1.55; margin-top: 14px; }
+  .card input {
+    margin-top: 16px; width: 100%;
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid rgba(120, 150, 220, .3);
+    border-radius: 10px; color: #e2e8f0;
+    font-size: 15px; padding: 11px 14px; text-align: center; outline: none;
+  }
+  .card input:focus { border-color: #4ade80; }
+  .card button {
+    margin-top: 18px; border: 0; cursor: pointer;
+    font-size: 17px; font-weight: 800; letter-spacing: 1px;
+    color: #04140c;
+    background: linear-gradient(180deg, #5ef29a, #16c964);
+    padding: 13px 44px; border-radius: 999px;
+    box-shadow: 0 8px 24px rgba(34, 197, 94, .4);
+    transition: transform .12s ease;
+  }
+  .card button:hover { transform: translateY(-1px); }
+  .card button:active { transform: translateY(1px); }
+  .card .hint { margin-top: 14px; font-size: 11px; color: #64748b; }
+  .skull { font-size: 44px; }
+  .card h2 { font-size: 25px; margin-top: 8px; }
+  .card h2 span { color: #f87171; }
+  .card .dstats { margin-top: 10px; font-size: 14px; color: #94a3b8; }
+  .card .dstats b { color: #e2e8f0; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="panel" id="boardPanel">
+    <div class="panel-title">ТОП ЗМЕЕК</div>
+    <div id="board"></div>
+  </div>
+  <div id="hudRight">
+    <div class="panel" id="mmPanel"><canvas id="mm" width="140" height="140"></canvas></div>
+    <div class="panel sndPanel"><button id="soundBtn" title="Звук (M)">🔊</button></div>
+  </div>
+</div>
+<div id="stats" class="panel"></div>
+<div id="hint" class="panel">← / → — поворот · ↑ — ускорение · M — звук</div>
+<div id="flash"></div>
+<div id="touch" class="touch-zones hidden">
+  <div class="tz tz-l" data-zone="left"><span>◀</span></div>
+  <div class="tz tz-r" data-zone="right"><span>▶</span></div>
+</div>
+<div id="touchHint" class="panel hidden">Держи левую / правую часть экрана — поворот · два пальца — ускорение</div>
+
+<div id="start" class="overlay2">
+  <div class="card">
+    <div class="logo">VIPERLOOP<span>3D</span></div>
+    <p class="sub">Собирай светящиеся сферы, расти и сражайся с другими змейками.
+    Врезался головой в чужое тело — рассыпался на сферы, которые съедят все подряд.
+    Ускорение (↑) сжигает твою длину — жги её на свой страх и риск.</p>
+    <input id="name" maxlength="14" placeholder="Имя змейки">
+    <button id="startBtn">▶ ИГРАТЬ</button>
+    <div class="hint">← → — поворот · ↑ — ускорение</div>
+  </div>
+</div>
+
+<div id="death" class="overlay2 hidden">
+  <div class="card">
+    <div class="skull">💀</div>
+    <h2>Тебя сбил(а) <span id="killer">?</span></h2>
+    <p class="dstats" id="deathStats"></p>
+    <button id="rebirthBtn">Сыграть снова</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- guards ----------
+const $ = id => document.getElementById(id);
+if (!window.THREE) {
+  $('start').querySelector('.sub').textContent =
+    'Не удалось загрузить three.js — обнови страницу (F5).';
+  $('startBtn').style.display = 'none';
+  return;
+}
+
+// ---------- helpers ----------
+const PI2 = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function angDelta(a, b) { let d = b - a; while (d > Math.PI) d -= PI2; while (d < -PI2) d += PI2; while (d < -Math.PI) d += PI2; return d; }
+function easeOutBack(t) { const c1 = 1.70158, c2 = c1 + 1; return 1 + c2 * (t - 1) ** 3 + c1 * (t - 1) ** 2; }
+
+// ---------- config ----------
+const A = 150;                  // половина арены
+const SPACING = 2.2;           // шаг между сегментами
+const TRAIL_STEP = 0.9;        // шаг точек трассы
+const TURN = 4.2;             // скорость поворота
+const STEER_RATE = 3.2;      // скорость, с которой ←/→ уводят курс
+const AI_COUNT = 8;
+const FOOD_COUNT = 220;
+const HUES = [145, 350, 200, 30, 280, 55, 320, 170];
+const NAMES = ['Випер', 'Кобра', 'Аспид', 'Манту', 'Удав', 'Жало', 'Гидра', 'Питон', 'Шип', 'Гадюка', 'Мамба', 'Джек'];
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0f1c);
+scene.fog = new THREE.Fog(0x0a0f1c, 130, 330);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 1, 800);
+camera.position.set(0, 40, 60);
+
+scene.add(new THREE.HemisphereLight(0x8899ff, 0x0a0f1c, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+sun.position.set(80, 120, 60);
+scene.add(sun);
+const followLight = new THREE.PointLight(0x66ffcc, 0.7, 90);
+scene.add(followLight);
+
+// ---------- floor: hex-паттерн ----------
+function hexTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0b1120';
+  g.fillRect(0, 0, 512, 512);
+  g.strokeStyle = '#1a2542';
+  g.lineWidth = 2;
+  const R = 42, w = Math.sqrt(3) * R, h = R * 1.5;
+  for (let row = -1; row * h < 512 + h; row++) {
+    for (let col = -1; col * w < 512 + w; col++) {
+      const cx = col * w + (row % 2 ? w / 2 : 0), cy = row * h;
+      g.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = PI2 / 6 * i + Math.PI / 6;
+        const px = cx + R * Math.cos(a), py = cy + R * Math.sin(a);
+        i ? g.lineTo(px, py) : g.moveTo(px, py);
+      }
+      g.closePath();
+      g.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(10, 10);
+  return tex;
+}
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(A * 2 + 10, A * 2 + 10),
+  new THREE.MeshStandardMaterial({ map: hexTexture(), roughness: 0.85, metalness: 0.05 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.02;
+scene.add(floor);
+
+// ---------- стены арены ----------
+const wallMat = new THREE.MeshStandardMaterial({
+  color: 0x1c0a12, emissive: 0xff2244, emissiveIntensity: 0.5, roughness: 0.4
+});
+[
+  [0,  A + 1.5, A * 2 + 12, 3],
+  [0, -A - 1.5, A * 2 + 12, 3],
+  [ A + 1.5, 0, 3, A * 2 + 12],
+  [-A - 1.5, 0, 3, A * 2 + 12],
+].forEach(([x, z, w, d]) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 2.6, d), wallMat);
+  m.position.set(x, 1.3, z);
+  scene.add(m);
+});
+
+// ---------- звёзды на фоне ----------
+{
+  const geo = new THREE.BufferGeometry();
+  const sp = new Float32Array(250 * 3);
+  for (let i = 0; i < 250; i++) {
+    sp[i * 3] = (Math.random() * 2 - 1) * (A + 120);
+    sp[i * 3 + 1] = 20 + Math.random() * 80;
+    sp[i * 3 + 2] = (Math.random() * 2 - 1) * (A + 120);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0x556699, size: 1.5, transparent: true, opacity: 0.6, fog: false
+  })));
+}
+
+// ---------- сферы (еда) ----------
+const unitSphere = new THREE.SphereGeometry(1, 12, 10);
+const orbMats = HUES.map(h => {
+  const c = new THREE.Color().setHSL(h / 360, 0.95, 0.55);
+  return new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.9, roughness: 0.25, metalness: 0.1 });
+});
+const pool = [];
+const orbs = []; // активные: { mesh, value, big, hueIndex, pop, phase }
+
+function spawnOrb(x, z, value, hueIndex, big) {
+  const mesh = pool.pop();
+  if (!mesh) return;
+  mesh.material = orbMats[hueIndex % HUES.length];
+  mesh.position.set(x, 0.7, z);
+  mesh.scale.setScalar(0.1);
+  mesh.visible = true;
+  const o = { mesh, value, big: !!big, hueIndex: hueIndex % HUES.length, pop: 0, phase: Math.random() * PI2 };
+  mesh.userData.o = o;
+  orbs.push(o);
+}
+function killOrb(o) {
+  o.mesh.visible = false;
+  o.mesh.userData.o = null;
+  pool.push(o.mesh);
+  const i = orbs.indexOf(o);
+  if (i >= 0) orbs.splice(i, 1);
+}
+for (let i = 0; i < 700; i++) {
+  const m = new THREE.Mesh(unitSphere, orbMats[0]);
+  m.visible = false;
+  scene.add(m);
+  pool.push(m);
+}
+
+// ---------- кольца-удary ----------
+const ringPool = [];
+for (let i = 0; i < 8; i++) {
+  const m = new THREE.Mesh(
+    new THREE.RingGeometry(0.85, 1, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = 0.4;
+  m.visible = false;
+  scene.add(m);
+  ringPool.push({ m, t: 1 });
+}
+function ring(x, z, color) {
+  const r = ringPool.find(r => r.t >= 1) || ringPool[0];
+  r.t = 0;
+  r.m.visible = true;
+  r.m.position.set(x, 0.4, z);
+  r.m.material.color.setHex(color);
+}
+
+// ---------- змейки ----------
+class Snake {
+  constructor(name, isPlayer, hueIndex, startLen) {
+    this.name = name;
+    this.isPlayer = isPlayer;
+    this.hueIndex = ((hueIndex % HUES.length) + HUES.length) % HUES.length;
+    this.hue = HUES[this.hueIndex];
+    this.angle = Math.random() * PI2;
+    this.desired = this.angle;
+    this.pos = new THREE.Vector3();
+    this.length = startLen;
+    this.kills = 0;
+    this.pulse = 0;
+    this.boosting = false;
+    this.boostT = 0;
+    this.dropT = 0;
+    this.repathT = Math.random();
+    this.target = new THREE.Vector3();
+    this.alive = true;
+    this.spawnT = 0; // привилегия после спавна
+
+    const h3 = this.hue / 360;
+    this.headMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(h3, 0.8, 0.6),
+      emissive: new THREE.Color().setHSL(h3, 0.9, 0.25),
+      roughness: 0.3, metalness: 0.1
+    });
+    this.bandMats = [0, 1, 2, 3, 4].map(b => new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL((h3 + b * 0.05) % 1, 0.75, 0.45),
+      emissive: new THREE.Color().setHSL((h3 + b * 0.05) % 1, 0.9, 0.12),
+      roughness: 0.35, metalness: 0.1
+    }));
+
+    this.group = new THREE.Group();
+    scene.add(this.group);
+
+    // голова: сфера + глаза
+    this.headGroup = new THREE.Group();
+    this.headGroup.add(new THREE.Mesh(unitSphere, this.headMat));
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+    const pupMat = new THREE.MeshStandardMaterial({ color: 0x0b0b15, roughness: 0.2 });
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), eyeMat);
+      eye.position.set(0.5 * sx, 0.38, 0.5);
+      const pup = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), pupMat);
+      pup.position.set(0.5 * sx, 0.38, 0.68);
+      this.headGroup.add(eye, pup);
+    }
+    this.group.add(this.headGroup);
+    this.meshes = [this.headGroup];
+
+    this.trail = [];
+    this.reposition({ x: 0, z: 0 });
+    this.ensureMeshes();
+  }
+
+  reposition(p) {
+    this.pos.set(p.x, 0, p.z);
+    this.angle = Math.random() * PI2;
+    this.desired = this.angle;
+    this.trail.length = 0;
+    const fx = Math.cos(this.angle), fz = Math.sin(this.angle);
+    for (let i = 0; i < 40; i++)
+      this.trail.push(new THREE.Vector3(p.x - fx * i * TRAIL_STEP, 0, p.z - fz * i * TRAIL_STEP));
+  }
+
+  destroy() { scene.remove(this.group); }
+
+  get scale() { return 1 + Math.min(1.5, Math.max(0, Math.log2(Math.max(2, this.length) / 8)) * 0.55); }
+  get headRadius() { return 1.7 * this.scale; }
+  get segRadius() { return 1.25 * this.scale; }
+  get speed() {
+    const base = 13 * (1.15 - 0.15 * Math.min(1, Math.max(0, this.scale - 0.9)));
+    return this.boosting ? base * 1.75 : base;
+  }
+
+  ensureMeshes() {
+    while (this.meshes.length < this.length) {
+      const i = this.meshes.length;
+      const m = new THREE.Mesh(unitSphere, this.bandMats[Math.floor(i / 6) % 5]);
+      this.group.add(m);
+      this.meshes.push(m);
+    }
+    for (let i = 1; i < this.meshes.length; i++) this.meshes[i].visible = i < this.length;
+  }
+
+  grow(v) {
+    this.length = Math.max(8, Math.round(this.length + v));
+    if (v > 0) this.pulse = 1;
+    this.ensureMeshes();
+  }
+
+  shrink(n) {
+    this.length = Math.max(10, this.length - n);
+    this.ensureMeshes();
+  }
+
+  updateSteer(dt) {
+    if (this.isPlayer) {
+      this.boosting = (keys.boost || mouse.down) && this.length > 12;
+      const steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      if (steer !== 0) this.desired += steer * STEER_RATE * dt; // ←/→ плавно поворачивают курс
+    } else {
+      this.repathT -= dt;
+      if (this.repathT <= 0) {
+        this.repathT = 0.5 + Math.random() * 0.8;
+        let best = null, bd = 90 * 90;
+        for (const o of orbs) {
+          if (!o.big && Math.random() < 0.75) continue; // боты охотятся в основном на крупные
+          const dx = o.mesh.position.x - this.pos.x, dz = o.mesh.position.z - this.pos.z;
+          const d = dx * dx + dz * dz;
+          if (d < bd) { bd = d; best = o; }
+        }
+        if (best) this.target.set(best.mesh.position.x, 0, best.mesh.position.z);
+        else this.target.set((Math.random() * 2 - 1) * A * 0.7, 0, (Math.random() * 2 - 1) * A * 0.7);
+      }
+
+      // не давай съехать за стену
+      let tx = this.target.x, tz = this.target.z;
+      const M = 30;
+      if (this.pos.x > A - M) tx = this.pos.x - 60;
+      if (this.pos.x < -A + M) tx = this.pos.x + 60;
+      if (this.pos.z > A - M) tz = this.pos.z - 60;
+      if (this.pos.z < -A + M) tz = this.pos.z + 60;
+      this.desired = Math.atan2(tz - this.pos.z, tx - this.pos.x);
+
+      // отталкивание от чужих голов/шеёй
+      let rx = 0, rz = 0;
+      for (const o of snakes) {
+        if (o === this || !o.alive) continue;
+        for (let i = 2; i < Math.min(o.length, 16); i += 2) {
+          const p = o.meshes[i].position;
+          const dx = this.pos.x - p.x, dz = this.pos.z - p.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < 200 && d2 > 0.01) { const w = 20 / d2; rx += dx * w; rz += dz * w; }
+        }
+      }
+      if (rx !== 0 || rz !== 0) this.desired += angDelta(this.desired, Math.atan2(rz, rx)) * 0.85;
+
+      // редкий спринт
+      if (this.length > 15 && Math.random() < dt * 0.2) this.boostT = 1.5;
+      this.boostT -= dt;
+      this.boosting = this.boostT > 0;
+    }
+
+    const delta = angDelta(this.angle, this.desired);
+    const maxT = TURN * dt * (this.boosting ? 0.6 : 1);
+    this.angle += clamp(delta * 7, -maxT, maxT);
+  }
+
+  updateMove(dt) {
+    const sp = this.speed;
+    this.pos.x += Math.cos(this.angle) * sp * dt;
+    this.pos.z += Math.sin(this.angle) * sp * dt;
+    this.pulse = Math.max(0, this.pulse - dt * 2.5);
+
+    if (this.boosting) {
+      this.dropT -= dt;
+      if (this.dropT <= 0) {
+        this.dropT = 1.4;
+        this.shrink(1);
+        const tail = this.trail[this.trail.length - 1] || this.pos;
+        spawnOrb(tail.x, tail.z, 1, this.hueIndex, false);
+      }
+    }
+  }
+
+  placeSegments(time) {
+    // пополняем трассу
+    const last = this.trail[0];
+    const dx = this.pos.x - last.x, dz = this.pos.z - last.z;
+    if (dx * dx + dz * dz >= TRAIL_STEP * TRAIL_STEP) {
+      this.trail.unshift(this.pos.clone());
+      const need = this.length * 3 + 20;
+      if (this.trail.length > need) this.trail.length = need;
+    }
+
+    // голова
+    const hr = this.headRadius * (1 + 0.45 * this.pulse * Math.abs(Math.sin(this.pulse * 12)));
+    this.headMat.emissiveIntensity = this.spawnT > 0 ? 0.4 + 0.6 * Math.abs(Math.sin(time * 8)) : 1;
+    this.headGroup.position.set(this.pos.x, 0.6 + Math.sin(time * 3) * 0.12, this.pos.z);
+    this.headGroup.scale.setScalar(hr);
+    this.headGroup.lookAt(this.pos.x + Math.cos(this.angle) * 3, 0.6, this.pos.z + Math.sin(this.angle) * 3);
+
+    // тело по дуге
+    let idx = 0, acc = 0;
+    for (let s = 1; s < this.length; s++) {
+      const want = s * SPACING;
+      while (idx + 1 < this.trail.length) {
+        const a = this.trail[idx], b = this.trail[idx + 1];
+        const d = a.distanceTo(b);
+        if (acc + d >= want) break;
+        acc += d;
+        idx++;
+      }
+      const a = this.trail[idx];
+      const b = this.trail[Math.min(idx + 1, this.trail.length - 1)];
+      const d = a.distanceTo(b);
+      const t = d > 1e-6 ? clamp((want - acc) / d, 0, 1) : 0;
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      const taper = 0.55 + 0.45 * (1 - s / this.length);
+      this.meshes[s].position.set(x, 0.55 + Math.sin(time * 3.2 + s * 0.55) * 0.13 * taper, z);
+      this.meshes[s].scale.setScalar(this.segRadius * taper);
+    }
+  }
+}
+
+// ---------- audio ----------
+const AudioFX = {
+  ctx: null, master: null, sfxBus: null, musicBus: null,
+  muted: localStorage.getItem("slizaroo-mute") === "1",
+  boostNoise: null, _lastEat: 0, _lastBotEat: 0,
+
+  init() {
+    if (this.ctx) { if (this.ctx.state === "suspended" && !document.hidden) this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : 0.9;
+    this.master.connect(this.ctx.destination);
+    this.sfxBus = this.ctx.createGain();
+    this.sfxBus.gain.value = 0.55;
+    this.sfxBus.connect(this.master);
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.gain.value = 0.3;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1700;
+    this.musicBus.connect(lp);
+    lp.connect(this.master);
+    this.startMusic();
+  },
+
+  setMuted(m) {
+    this.muted = m;
+    localStorage.setItem("slizaroo-mute", m ? "1" : "0");
+    if (this.master) this.master.gain.value = m ? 0 : 0.9;
+  },
+
+  tone(type, f0, f1, t0, dur, vol, bus) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + (t0 || 0);
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.03, dur * 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(bus || this.sfxBus);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  },
+
+  noise(t0, dur, vol, freq) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + (t0 || 0);
+    const len = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const f = this.ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = freq || 800;
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    src.connect(f);
+    f.connect(g);
+    g.connect(this.sfxBus);
+    src.start(t);
+  },
+
+  eat(v, big) {
+    const now = performance.now();
+    if (now - this._lastEat < (big ? 120 : 70)) return;
+    this._lastEat = now;
+    if (big) {
+      this.tone("triangle", 320, 70, 0, 0.3, 0.5);
+      this.tone("sine", 700 + v * 60, 1100, 0, 0.18, 0.3);
+    } else {
+      this.tone("sine", 480 + v * 90 + Math.random() * 60, 900 + v * 100, 0, 0.15, 0.22);
+    }
+  },
+
+  botEat(big) {
+    const now = performance.now();
+    if (now - this._lastBotEat < 140) return;
+    this._lastBotEat = now;
+    this.tone("sine", big ? 260 : 420, big ? 120 : 640, 0, big ? 0.22 : 0.12, big ? 0.1 : 0.06);
+  },
+
+  kill() {
+    this.tone("sine", 660, 660, 0, 0.22, 0.18);
+    this.tone("sine", 880, 880, 0.09, 0.28, 0.18);
+    this.noise(0, 0.25, 0.2, 1500);
+  },
+
+  death() {
+    this.stopBoost();
+    this.tone("sawtooth", 380, 50, 0, 0.6, 0.3);
+    this.noise(0, 0.5, 0.5, 500);
+  },
+
+  startBoost() {
+    if (!this.ctx || this.boostNoise) return;
+    const ctx = this.ctx;
+    const len = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 1000;
+    bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+    g.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + 0.25);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxBus);
+    src.start();
+    this.boostNoise = { src, g };
+  },
+
+  stopBoost() {
+    if (!this.boostNoise) return;
+    const { src, g } = this.boostNoise;
+    this.boostNoise = null;
+    g.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.1);
+    setTimeout(() => { try { src.stop(); } catch (e) { /* уже остановлен */ } }, 400);
+  },
+
+  startMusic() {
+    // лёгкий эмбиент: аккорды Am - F - G - E
+    const chords = [
+      [220, 261.63, 329.63],
+      [174.61, 220, 261.63],
+      [196, 246.94, 293.66],
+      [164.81, 196, 246.94],
+    ];
+    let step = 0;
+    const beat = () => {
+      if (!this.ctx || this.ctx.state !== "running") return;
+      const ch = chords[step % chords.length];
+      ch.forEach(f => this.tone("triangle", f, f, 0, 0.46, 0.05, this.musicBus));
+      this.tone("sine", ch[0] / 2, ch[0] / 2, 0, 0.45, 0.09, this.musicBus);
+      if (step % 2 === 1) {
+        const f = ch[(Math.random() * ch.length) | 0] * 2;
+        setTimeout(() => this.tone("sine", f, f, 0, 0.25, 0.045, this.musicBus), 240);
+      }
+      step++;
+    };
+    this._musicTimer = setInterval(beat, 480);
+  },
+};
+
+function updateSoundBtn() {
+  const b = $("soundBtn");
+  if (b) b.textContent = AudioFX.muted ? "🔇" : "🔊";
+}
+function toggleMute() {
+  AudioFX.init();
+  AudioFX.setMuted(!AudioFX.muted);
+  updateSoundBtn();
+}
+updateSoundBtn();
+window.__audio = AudioFX; // для отладки в консоли
+
+// ---------- мир ----------
+const snakes = [];
+let player = null;
+let aiCounter = 0;
+const respawnQueue = [];
+
+function findSpawn() {
+  let best = null, bestD = -1;
+  for (let t = 0; t < 60; t++) {
+    const p = { x: (Math.random() * 2 - 1) * A * 0.85, z: (Math.random() * 2 - 1) * A * 0.85 };
+    let d = Infinity;
+    for (const s of snakes) {
+      if (!s.alive) continue;
+      let dx = s.pos.x - p.x, dz = s.pos.z - p.z;
+      let dd = dx * dx + dz * dz;
+      if (dd < d) d = dd;
+      for (let i = 2; i < s.length; i += 2) {
+        const m = s.meshes[i];
+        if (!m) break;
+        dx = m.position.x - p.x;
+        dz = m.position.z - p.z;
+        dd = dx * dx + dz * dz;
+        if (dd < d) d = dd;
+      }
+    }
+    if (d > 120 * 120) return p;
+    if (d > bestD) { bestD = d; best = p; }
+  }
+  return best || { x: 0, z: 0 };
+}
+
+function spawnAI() {
+  const s = new Snake(
+    NAMES[aiCounter % NAMES.length],
+    false,
+    (aiCounter * 5) % HUES.length,
+    8 + Math.floor(Math.random() * 14)
+  );
+  s.reposition(findSpawn());
+  s.spawnT = 2.5;
+  snakes.push(s);
+  aiCounter++;
+}
+for (let i = 0; i < AI_COUNT; i++) spawnAI();
+for (let i = 0; i < FOOD_COUNT; i++) {
+  const big = Math.random() < 0.15;
+  spawnOrb(
+    (Math.random() * 2 - 1) * A * 0.95,
+    (Math.random() * 2 - 1) * A * 0.95,
+    big ? 2 : 1,
+    (Math.random() * HUES.length) | 0,
+    big
+  );
+}
+
+// ---------- смерть / возрождение ----------
+let survivalStart = 0;
+let lastName = '';
+let shakeT = 0, shakeMag = 0;
+
+function flashRed() {
+  const f = $('flash');
+  f.style.transition = 'none';
+  f.style.opacity = '1';
+  requestAnimationFrame(() => {
+    f.style.transition = 'opacity .5s';
+    f.style.opacity = '0';
+  });
+}
+
+function killSnake(s, by) {
+  if (!s.alive) return;
+  s.alive = false;
+  s.boosting = false;
+  ring(s.pos.x, s.pos.z, s.isPlayer ? 0xff3355 : 0x66ffaa);
+
+  // рассыпаем тело на сферы
+  const drops = [];
+  const step = Math.max(1, Math.floor(s.length / 30));
+  for (let i = 2; i < s.length && drops.length < 30; i += step) {
+    const p = s.meshes[i] ? s.meshes[i].position : s.pos;
+    drops.push([p.x, p.z]);
+  }
+  s.destroy();
+  for (const [x, z] of drops) spawnOrb(x, z, 3, s.hueIndex, true);
+
+  if (by && by !== s) by.kills++;
+  if (s.isPlayer) {
+    AudioFX.death();
+    flashRed();
+    shakeT = 0.6;
+    shakeMag = 1.6;
+    $('killer').textContent = by ? by.name : 'стены арены';
+    $('deathStats').innerHTML =
+      `Длина: <b>${s.length}</b> · Сбил(а): <b>${s.kills}</b> · Время: <b>${(simT - survivalStart).toFixed(1)} с</b>`;
+    $('death').classList.remove('hidden');
+  } else {
+    if (by && by.isPlayer) AudioFX.kill();
+    respawnQueue.push({ t: 3.5 });
+  }
+}
+
+function startRound() {
+  if (player) {
+    const i = snakes.indexOf(player);
+    if (i >= 0) snakes.splice(i, 1);
+  }
+  lastName = $('name').value.trim() || lastName || 'Змейка';
+  player = new Snake(lastName, true, (Math.random() * HUES.length) | 0, 10);
+  player.reposition(findSpawn());
+  player.spawnT = 2.5;
+  snakes.push(player);
+  survivalStart = simT;
+  $('start').classList.add('hidden');
+  $('death').classList.add('hidden');
+}
+
+function updateRespawns(dt) {
+  for (let i = respawnQueue.length - 1; i >= 0; i--) {
+    respawnQueue[i].t -= dt;
+    if (respawnQueue[i].t <= 0) {
+      respawnQueue.splice(i, 1);
+      spawnAI();
+    }
+  }
+}
+
+// чистим массив от давно умерших ботов (игрок остаётся — он нужен для статистики)
+function purgeDead() {
+  for (let i = snakes.length - 1; i >= 0; i--) {
+    const s = snakes[i];
+    if (!s.alive && !s.isPlayer) snakes.splice(i, 1);
+  }
+}
+
+// ---------- collisions ----------
+function eatOrbs() {
+  for (const s of snakes) {
+    if (!s.alive) continue;
+    const hr = s.headRadius;
+    for (let i = orbs.length - 1; i >= 0; i--) {
+      const o = orbs[i];
+      const p = o.mesh.position;
+      const dx = p.x - s.pos.x, dz = p.z - s.pos.z;
+      const rr = hr + o.mesh.scale.x * 1.3 + 0.6;
+      if (dx * dx + dz * dz < rr * rr) {
+        s.grow(o.value);
+        killOrb(o);
+        if (s.isPlayer) {
+          AudioFX.eat(o.value, o.big);
+        } else if (player && player.alive) {
+          // чужое жужжание — только когда рядом с камерой
+          const ddx = p.x - player.pos.x, ddz = p.z - player.pos.z;
+          if (ddx * ddx + ddz * ddz < 8100) AudioFX.botEat(o.big);
+        }
+      }
+    }
+  }
+}
+
+function snakeCollisions() {
+  for (const s of snakes) {
+    if (!s.alive || s.spawnT > 0) continue; // привилегия после спавна
+    const hr = s.headRadius * 0.9;
+    let diedBy = null;
+    outer:
+    for (const o of snakes) {
+      if (o === s || !o.alive) continue;
+      const r = hr + o.segRadius * 0.9;
+      const r2 = r * r;
+      for (let i = 1; i < o.length; i++) {
+        const p = o.meshes[i].position;
+        const dx = s.pos.x - p.x, dz = s.pos.z - p.z;
+        if (dx * dx + dz * dz < r2) { diedBy = o; break outer; }
+      }
+    }
+    if (diedBy) killSnake(s, diedBy);
+  }
+}
+
+// ---------- input (кроссплатформа: клавиатура + сенсор) ----------
+const mouse = { down: false };
+const keys = { left: false, right: false, boost: false };
+const kb = { left: false, right: false, boost: false }; // клавиатура
+const tz = { left: false, right: false };               // сенсорные зоны
+const KEY_MAP = {
+  ArrowLeft: "left", KeyA: "left",
+  ArrowRight: "right", KeyD: "right",
+  ArrowUp: "boost", KeyW: "boost",
+  Space: "boost",
+  KeyM: "mute",
+};
+function syncKeys() {
+  keys.left = kb.left || tz.left;
+  keys.right = kb.right || tz.right;
+  keys.boost = kb.boost || (tz.left && tz.right);
+}
+
+window.addEventListener("mousedown", e => {
+  const t = e.target;
+  const onUi = t.closest && (t.closest(".overlay2") || t.closest("button"));
+  if (e.button === 0 && !onUi) {
+    mouse.down = true;
+    AudioFX.init();
+  }
+});
+window.addEventListener("mouseup", () => mouse.down = false);
+window.addEventListener("keydown", e => {
+  const k = KEY_MAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  AudioFX.init();
+  if (k === "mute") toggleMute();
+  else { kb[k] = true; syncKeys(); }
+});
+window.addEventListener("keyup", e => {
+  const k = KEY_MAP[e.code];
+  if (!k || k === "mute") return;
+  kb[k] = false;
+  syncKeys();
+});
+window.addEventListener("blur", () => {
+  mouse.down = false;
+  kb.left = kb.right = kb.boost = false;
+  tz.left = tz.right = false;
+  syncKeys();
+});
+window.addEventListener("contextmenu", e => e.preventDefault());
+
+// сенсор: автоопределение — зоны ◀ / ▶ по сторонам экрана, оба пальца — буст
+const isTouch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+if (isTouch) {
+  document.getElementById("touch").classList.remove("hidden");
+  document.getElementById("touchHint").classList.remove("hidden");
+  document.getElementById("hint").classList.add("hidden");
+  document.getElementById("stats").style.bottom = "58px"; // не перекрывать тач-подсказку
+}
+document.querySelectorAll(".tz").forEach(z => {
+  const id = z.dataset.zone;
+  const on = e => {
+    e.preventDefault();
+    AudioFX.init();
+    tz[id] = true;
+    z.classList.add("on");
+    syncKeys();
+  };
+  const off = () => {
+    tz[id] = false;
+    z.classList.remove("on");
+    syncKeys();
+  };
+  z.addEventListener("pointerdown", on, { passive: false });
+  z.addEventListener("pointerup", off);
+  z.addEventListener("pointercancel", off);
+  z.addEventListener("pointerleave", off);
+});
+
+$("startBtn").addEventListener("click", () => { AudioFX.init(); startRound(); });
+$("rebirthBtn").addEventListener("click", () => { AudioFX.init(); startRound(); });
+$("soundBtn").addEventListener("click", toggleMute);
+
+// ---------- камера / HUD ----------
+function followTarget() {
+  if (player && player.alive) return player;
+  let best = null;
+  for (const s of snakes) if (s.alive && s !== player && (!best || s.length > best.length)) best = s;
+  return best;
+}
+
+function updateCamera(dt) {
+  const f = followTarget();
+  if (!f) return;
+  const h = 30 + f.scale * 15;
+  const k = 1 - Math.exp(-4 * dt);
+  camera.position.x += (f.pos.x - camera.position.x) * k;
+  camera.position.y += (h - camera.position.y) * k;
+  camera.position.z += (f.pos.z + h * 0.55 - camera.position.z) * k;
+  camera.lookAt(f.pos.x, 0, f.pos.z);
+  if (shakeT > 0) {
+    shakeT -= dt;
+    const m = shakeMag * Math.max(0, shakeT) * 2;
+    camera.position.x += (Math.random() - 0.5) * m;
+    camera.position.y += (Math.random() - 0.5) * m;
+    camera.position.z += (Math.random() - 0.5) * m;
+  }
+  followLight.position.set(f.pos.x, 6, f.pos.z);
+}
+
+const mctx = $('mm').getContext('2d');
+function drawMinimap() {
+  const S = 140;
+  mctx.clearRect(0, 0, S, S);
+  const sc = S / (A * 2 + 60);
+  mctx.strokeStyle = 'rgba(255, 70, 90, .6)';
+  mctx.lineWidth = 1.5;
+  mctx.strokeRect(S / 2 - A * sc, S / 2 - A * sc, 2 * A * sc, 2 * A * sc);
+  for (const s of snakes) {
+    if (!s.alive) continue;
+    const x = S / 2 + s.pos.x * sc, y = S / 2 + s.pos.z * sc;
+    mctx.fillStyle = s.isPlayer ? '#4ade80' : `hsl(${s.hue}, 90%, 60%)`;
+    mctx.beginPath();
+    mctx.arc(x, y, s.isPlayer ? 3.5 : 2.2, 0, PI2);
+    mctx.fill();
+  }
+}
+
+let boardT = 0;
+function updateBoard(dt) {
+  boardT -= dt;
+  if (boardT > 0) return;
+  boardT = 0.4;
+  const top = snakes.filter(s => s.alive).sort((a, b) => b.length - a.length).slice(0, 5);
+  $('board').innerHTML = top.map((s, i) =>
+    `<div class="row${s.isPlayer ? ' me' : ''}"><span class="rank">${i + 1}</span>` +
+    `<span class="nm">${s.isPlayer ? 'Ты' : s.name}</span><span class="sc">${s.length}</span></div>`
+  ).join('');
+}
+
+let statsT = 0;
+function updateStats(dt) {
+  statsT -= dt;
+  if (statsT > 0) return;
+  statsT = 0.1;
+  const el = $('stats');
+  if (!player || !player.alive) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = `🐍 ${esc(player.name)} — длина <b>${player.length}</b> · килы <b>${player.kills}</b>` +
+    (player.boosting ? ' · <b>🔥 БУСТ</b>' : '');
+}
+
+// ---------- анимация сфер / колец ----------
+function updateOrbs(dt, time) {
+  for (const o of orbs) {
+    o.pop = Math.min(1, o.pop + dt * 3.5);
+    const target = o.big ? 1.7 : (o.value >= 2 ? 1.3 : 1);
+    o.mesh.scale.setScalar(target * easeOutBack(o.pop));
+    o.mesh.position.y = 0.7 + Math.sin(time * 2 + o.phase) * 0.18;
+    o.mesh.rotation.y += dt * 1.5;
+  }
+}
+function updateRings(dt) {
+  for (const r of ringPool) {
+    if (r.t >= 1) continue;
+    r.t = Math.min(1, r.t + dt / 0.55);
+    r.m.scale.setScalar(1 + r.t * 16);
+    r.m.material.opacity = 0.75 * (1 - r.t);
+    if (r.t >= 1) r.m.visible = false;
+  }
+}
+
+// ---------- resize ----------
+window.addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// пауза звука при сворачивании вкладки
+document.addEventListener("visibilitychange", () => {
+  if (!AudioFX.ctx) return;
+  if (document.hidden) AudioFX.ctx.suspend();
+  else AudioFX.ctx.resume();
+});
+
+// ---------- main loop ----------
+const clock = new THREE.Clock();
+let simT = 0;
+let wasPBoost = false;
+
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  simT += dt;
+
+  updateRespawns(dt);
+
+  for (const s of snakes) if (s.alive) s.updateSteer(dt);
+  for (const s of snakes) if (s.alive) s.updateMove(dt);
+  for (const s of snakes) if (s.alive) s.placeSegments(simT);
+
+  for (const s of snakes) {
+    if (!s.alive) continue;
+    if (s.spawnT > 0) s.spawnT -= dt;
+    else if (Math.abs(s.pos.x) > A - 2 || Math.abs(s.pos.z) > A - 2) killSnake(s, null);
+  }
+  eatOrbs();
+  snakeCollisions();
+  purgeDead();
+
+  updateOrbs(dt, simT);
+  updateRings(dt);
+  wallMat.emissiveIntensity = 0.45 + 0.25 * Math.sin(simT * 2);
+
+  const f = followTarget();
+  if (f) followLight.position.set(f.pos.x, 6, f.pos.z);
+  const pBoost = !!(player && player.alive && player.boosting);
+  if (pBoost !== wasPBoost) {
+    if (pBoost) AudioFX.startBoost();
+    else AudioFX.stopBoost();
+    wasPBoost = pBoost;
+  }
+  updateCamera(dt);
+  updateStats(dt);
+  updateBoard(dt);
+  drawMinimap();
+
+  renderer.render(scene, camera);
+}
+tick();
+
+// отладочный заглядыватель в игру (в консоли браузера: window.__debug())
+window.__debug = () => ({
+  simT: Math.round(simT * 10) / 10,
+  snakes: snakes.length,
+  orbs: orbs.length,
+  player: player ? {
+    alive: player.alive,
+    len: player.length,
+    name: player.name,
+    spawnT: Math.round(player.spawnT * 10) / 10,
+    pos: [Math.round(player.pos.x), Math.round(player.pos.z)],
+  } : null,
+});
+})();
+</script>
+<script>
+// Регистрация service worker (PWA) + тост "новая версия"
+(function () {
+  if (!("serviceWorker" in navigator)) return;
+  if (location.protocol !== "https:" && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").then(function (reg) {
+      reg.addEventListener("updatefound", function () {
+        var nw = reg.installing;
+        nw.addEventListener("statechange", function () {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdateToast();
+        });
+      });
+    }).catch(function (err) { console.warn("SW:", err); });
+  });
+  function showUpdateToast() {
+    if (document.getElementById("sw-toast")) return;
+    var d = document.createElement("div");
+    d.id = "sw-toast";
+    d.style.cssText = "position:fixed;left:50%;bottom:52px;transform:translateX(-50%);z-index:30;background:rgba(13,20,38,.95);border:1px solid rgba(96,130,200,.4);border-radius:12px;padding:10px 16px;font-size:13px;color:#e2e8f0;display:flex;gap:10px;align-items:center;";
+    d.textContent = "Есть новая версия игры. ";
+    var b = document.createElement("button");
+    b.textContent = "Обновить";
+    b.style.cssText = "cursor:pointer;border:0;background:linear-gradient(180deg,#5ef29a,#16c964);color:#04140c;font-weight:700;border-radius:8px;padding:6px 14px;";
+    b.addEventListener("click", async function () {
+      var reg = await navigator.serviceWorker.getRegistration();
+      var waiting = reg.waiting || reg.installing;
+      if (waiting) { waiting.postMessage("SKIP_WAITING"); location.reload(); }
+    });
+    d.appendChild(b);
+    document.body.appendChild(d);
+  }
+})();
+</script>
+
+</body>
+</html>
